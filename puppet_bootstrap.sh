@@ -31,30 +31,6 @@
 #       <...>
 
 ################################################################################
-# Check execution context
-################################################################################
-
-# Are we runned by root ?
-if [ "$(id -u)" != "0" ]; then
-    echo "This script must be run as root"
-    exit 1
-fi
-
-# Are we runned on a supported OS ?
-if [ -f "/etc/debian_version" ]; then
-    # Original code from:
-    # http://unix.stackexchange.com/questions/109958/bash-script-to-find-debian-release-number-from-etc-debian-version
-    read -d . VERSION < /etc/debian_version
-    if [ "$VERSION" -ne "7" ]; then
-	echo "Sorry, your OS is not supported !"
-	exit 1
-    fi
-else
-    echo "Sorry, your OS is not supported !"
-    exit 1
-fi
-
-################################################################################
 # Default values for arguments
 ################################################################################
 
@@ -113,7 +89,7 @@ while [[ $# > 0 ]]; do
 	    echo "Supported OS:"
 	    echo " - Debian 7 (Wheezy)"
 	    echo
-	    echo "Options:"
+	    echo "Arguments:"
 	    echo "-s hostname or --server hostname"
 	    echo "    Specify Puppet Master name"
 	    echo "    Default: hostname of running host"
@@ -127,15 +103,15 @@ while [[ $# > 0 ]]; do
 	    echo "    Default: install Puppet Master and Agent"
 	    echo "--path path"
 	    echo "    Specify path to Puppet manifests"
-	    echo "    Ignored if option -a or --agentonly is used"
+	    echo "    Argument ignored if option -a or --agentonly is used"
 	    echo "    Default: /srv/puppet"
 	    echo "--mysql"
 	    echo "    Specify MySQL as database backend for Puppet Master"
-	    echo "    Ignored if option -a or --agentonly is used"
-	    echo "    Default: sqllite3 backend"
+	    echo "    Argument ignored if option -a or --agentonly is used"
+	    echo "    Default: SQLite3 backend"
 	    echo "--passenger"
 	    echo "    Use Apache with Passenger module as HTTP server for Puppet Master"
-	    echo "    Ignored if option -a or --agentonly is used"
+	    echo "    Argument ignored if option -a or --agentonly is used"
 	    echo "    Default: WebRICK (Ruby integrated HTTP server)"
 	    echo "-h or --help"
 	    echo "    Print this message"
@@ -146,10 +122,10 @@ while [[ $# > 0 ]]; do
 	    echo " - Set up Puppet Master and Puppet Agent on a production machine"
 	    echo "   # ${script_name} -e production --mysql --passenger"
 	    echo " - Set up a Puppet Agent on a production machine and enroll it on"
-	    echo "   the Puppet Master server named puppet"
+	    echo "   the Puppet Master server named 'puppet'"
 	    echo "   # ${script_name} -a -e production"
 	    echo " - Set up a Puppet Agent on a testing machine and enroll it on"
-	    echo "   Puppet Master server named  server.example.com"
+	    echo "   Puppet Master server named 'server.example.com'"
 	    echo "   # ${script_name} -a -e testing -s puppet.example.com"
 	    exit 0
 	    ;;
@@ -161,6 +137,40 @@ while [[ $# > 0 ]]; do
 	    ;;
     esac
 done
+
+################################################################################
+# Check execution context
+################################################################################
+
+# Are we runned by root ?
+if [ "$(id -u)" != "0" ]; then
+    echo "This script must be run as root"
+    exit 1
+fi
+
+# Are we runned on a supported OS ?
+is_os_supported=YES
+if [ -f "/etc/debian_version" ]; then
+    # Original code from:
+    # http://unix.stackexchange.com/questions/109958/bash-script-to-find-debian-release-number-from-etc-debian-version
+    read -d . VERSION < /etc/debian_version
+    if [ "$VERSION" -ne "7" ]; then
+	is_os_supported=NO
+    fi
+else
+    is_os_supported=NO
+    exit 1
+fi
+if [ "$is_os_supported" == "NO" ]; then
+    echo "Your OS is not supported!"
+    read -p "Give it a try anyway (Y/N)? " -n 1 -r
+    echo
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]
+    then
+	echo "Aborting as requested"
+	exit 1
+    fi
 
 ################################################################################
 # Initialize log file & set up helpers
