@@ -64,7 +64,7 @@ Everything is logged to file 'puppet_bootstrap.log' in the current directory.
 
   Argument ignored if option `-a` or `--agentonly` is used
 
-  Default: WebRICK (Ruby integrated HTTP server)
+  Default: WEBrick (Ruby integrated HTTP server)
 
 * `-h` or `--help`
 

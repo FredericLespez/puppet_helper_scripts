@@ -112,7 +112,7 @@ while [[ $# > 0 ]]; do
 	    echo "--passenger"
 	    echo "    Use Apache with Passenger module as HTTP server for Puppet Master"
 	    echo "    Argument ignored if option -a or --agentonly is used"
-	    echo "    Default: WebRICK (Ruby integrated HTTP server)"
+	    echo "    Default: WEBrick (Ruby integrated HTTP server)"
 	    echo "-h or --help"
 	    echo "    Print this message"
 	    echo
