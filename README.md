@@ -22,46 +22,67 @@ Everything is logged to file 'puppet_bootstrap.log' in the current directory.
 
 ### Arguments:
 
-* ```-s hostname``` or ```--server hostname```
-Specify Puppet Master name. Useful when you only install the agent.
-Default: hostname of running host or 'puppet' if option ```-a``` or ```--agentonly``` is used
+* `-s hostname` or `--server hostname`
 
-* ```-e env``` or ```--environment env```
-Specify environment for Puppet Agent
-Possible values: production testing development
-Default: development
+  Specify Puppet Master name. Useful when you only install the agent.
 
-* ```-a``` or ```--agentonly```
-Only install Puppet Agent
-Default: install Puppet Master and Agent
+  Default: hostname of running host or 'puppet' if option `-a` or `--agentonly` is used
 
-* ```--path path```
-Specify path to Puppet manifests
-Argument ignored if option ```-a``` or ```--agentonly``` is used
-Default: /srv/puppet
+* `-e env` or `--environment env`
 
-* ```--mysql```
-Specify MySQL as database backend for Puppet Master
-Argument ignored if option ```-a``` or ```--agentonly``` is used
-Default: SQLite3 backend
+  Specify environment for Puppet Agent
 
-* ```--passenger```
-Use Apache with Passenger module as HTTP server for Puppet Master
-Argument ignored if option ```-a``` or ```--agentonly``` is used
-Default: WebRICK (Ruby integrated HTTP server)
+  Possible values: production testing development
 
-* ```-h``` or ```--help```
-Print help message
+  Default: development
+
+* `-a` or `--agentonly`
+
+  Only install Puppet Agent
+
+  Default: install Puppet Master and Agent
+
+* `--path path`
+
+  Specify path to Puppet manifests
+
+  Argument ignored if option `-a` or `--agentonly` is used
+
+  Default: /srv/puppet
+
+* `--mysql`
+
+  Specify MySQL as database backend for Puppet Master
+
+  Argument ignored if option `-a` or `--agentonly` is used
+
+  Default: SQLite3 backend
+
+* `--passenger`
+
+  Use Apache with Passenger module as HTTP server for Puppet Master
+
+  Argument ignored if option `-a` or `--agentonly` is used
+
+  Default: WebRICK (Ruby integrated HTTP server)
+
+* `-h` or `--help`
+
+  Print help message
 
 ### Examples:
 * Set up Puppet Master and Puppet Agent on a development machine
-```# puppet_bootstrap.sh```
+
+  `# puppet_bootstrap.sh`
 
 * Set up Puppet Master and Puppet Agent on a production machine
-```# puppet_bootstrap.sh -e production --mysql --passenger```
+
+  `# puppet_bootstrap.sh -e production --mysql --passenger`
 
 * Set up a Puppet Agent on a production machine and enroll it on the Puppet Master server named 'puppet'
-```# puppet_bootstrap.sh -a -e production```
+
+  `# puppet_bootstrap.sh -a -e production`
 
 * Set up a Puppet Agent on a testing machine and enroll it on Puppet Master server named 'server.example.com'
-```# puppet_bootstrap.sh -a -e testing -s puppet.example.com```
+
+  `# puppet_bootstrap.sh -a -e testing -s puppet.example.com`
