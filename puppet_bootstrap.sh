@@ -159,7 +159,6 @@ if [ -f "/etc/debian_version" ]; then
     fi
 else
     is_os_supported=NO
-    exit 1
 fi
 if [ "$is_os_supported" == "NO" ]; then
     echo "Your OS is not supported!"
@@ -171,6 +170,7 @@ if [ "$is_os_supported" == "NO" ]; then
 	echo "Aborting as requested"
 	exit 1
     fi
+fi
 
 ################################################################################
 # Initialize log file & set up helpers
@@ -219,7 +219,7 @@ logaction()
 }
 logdone()
 {
-    local COLOR="$GREEN"
+    local COLOR="$CYAN"
     logmess $COLOR "************************* Done *************************"
     lognewline
 }
