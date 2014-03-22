@@ -29,6 +29,9 @@
 #       X509v3 Subject Alternative Name:
 #           DNS:[MASTER FQDN], DNS:puppet, DNS:puppet.ccheznous.org
 #       <...>
+# - Should we clean puppet vardir (rm -rf /var/lib/puppet) ?
+# - Make environment list configurable and dynamic
+# - Make manifests, modules and templates directory configurable
 
 ################################################################################
 # Default values for arguments
