@@ -16,22 +16,13 @@
 #     along with this program.  If not, see <http://www.gnu.org/licenses/>
 
 # TODO
-# - Add a quiet mode ? We will need to handle mysql root & puppet password
-#   through the command line
-# - Do we need to use dns_alt_names if hostname of server if not 'puppet' and
-#   agents connect to the server using the 'puppet' name (via a CNAME entry in
-#   DNS or in the hosts file of agents) ?
-#     * Seem useless...
-#       On master : # puppet cert --list [MASTER FQDN]
-#+ "[MASTER FQDN]" ([CERT FINGER PRINT]) (alt names: "DNS:[MASTER FQDN]", "DNS:puppet", "DNS:puppet.ccheznous.org")
-#       On master : # puppet cert --print [MASTER FQDN]
-#       <...>
-#       X509v3 Subject Alternative Name:
-#           DNS:[MASTER FQDN], DNS:puppet, DNS:puppet.ccheznous.org
-#       <...>
-# - Should we clean puppet vardir (rm -rf /var/lib/puppet) ?
-# - Make environment list configurable and dynamic
-# - Make manifests, modules and templates directory configurable
+# - Add a quiet mode ?
+#   * Not easy for Puppet Master with MySQL since we will need to handle mysql
+#     root & puppet password in bash through the command line...
+#   * We can at least a quiet mode when only the agent is installed
+# - Are we sure that the lsb_release command is always installed by default ?
+# - Should we handle fileserve.conf (with custom mount per environment
+#   files_production, files_development, etc.) ?
 
 ################################################################################
 # Default values for arguments
@@ -40,11 +31,17 @@
 script_name=$(basename "$0")
 log_file=${script_name%.*}.log
 puppet_manifests_home=/srv/puppet
+puppet_environment_list=( "production" "testing" "development")
+puppet_manifestdir=manifests
+puppet_modulepath=modules
+puppet_templatedir=data
 puppet_agent_environment=development
 puppet_server_option=NO
 puppet_agent_only=NO
+puppet_use_dns_alt_names=NO
 puppet_use_mysql=NO
 puppet_use_passenger=NO
+puppet_purge_vardir=YES
 
 ################################################################################
 # Parse arguments
@@ -68,8 +65,29 @@ while [[ $# > 0 ]]; do
 	-a|--agentonly)
 	    puppet_agent_only=YES
 	    ;;
-	--path)
+	--base_path)
 	    puppet_manifests_home="$1"
+	    shift
+	    ;;
+	--environment_list)
+	    puppet_environment_list=($(echo $1))
+	    shift
+	    ;;
+	--manifestdir)
+	    puppet_manifestdir="$1"
+	    shift
+	    ;;
+	--modulepath)
+	    puppet_modulepath="$1"
+	    shift
+	    ;;
+	--templatedir)
+	    puppet_templatedir="$1"
+	    shift
+	    ;;
+	--dns_alt_names)
+	    puppet_use_dns_alt_names=YES
+	    puppet_dns_alt_names=$1
 	    shift
 	    ;;
 	--mysql)
@@ -78,14 +96,32 @@ while [[ $# > 0 ]]; do
 	--passenger)
 	    puppet_use_passenger=YES
 	    ;;
+	--keep_vardir)
+	    puppet_purge_vardir=NO
+	    ;;
 	-h|--help)
 	    echo "This script installs Puppet Master and Puppet Agent."
 	    echo "By default:"
-	    echo " - 3 environments are defined : production, testing and development"
-	    echo " - Manifests, templates and modules are under /srv/puppet/[ENV]"
+	    echo " - Default environments: ${puppet_environment_list[@]}"
+	    echo " - Manifests, modules and templates are respectively under:"
+	    echo "   * ${puppet_manifests_home}/[ENV]/${puppet_manifestdir}"
+	    echo "   * ${puppet_manifests_home}/[ENV]/${puppet_modulepath}"
+	    echo "   * ${puppet_manifests_home}/[ENV]/${puppet_templatedir}"
+	    echo " - Puppet Master will be automatically started on boot"
 	    echo " - Puppet Master use SQLlite3 and WebRICK"
-	    echo " - Puppet Agent environment is set to development"
-	    echo " - Puppet Agent is not automatically started on boot"
+	    echo " - Puppet Agent environment is set to ${puppet_agent_environment}"
+	    echo " - Puppet Agent will not be automatically started on boot"
+	    echo " - ** WARNING ** Puppet vardir will be purged"
+	    echo "   Main consequences of this:"
+	    echo "     * Master: Master certificate will be erased"
+	    echo "     * Master: Managed agents will be forgotten"
+	    echo "     * Master: All saved files through the filebucket will be erased"
+	    echo "     * Master: All cached data (facts, catalogs, etc.) will be erased"
+	    echo "     * Agent: Agent certificate will be erased"
+	    echo "     * Agent: Master enrollment will be erased"
+	    echo "     * Agent: All saved files through the filebucket will be erased"
+	    echo "     * Agent: All cached data (facts, catalogs, etc.) will be erased"
+	    echo "   Use the --keep_vardir argument to avoid this"
 	    echo
 	    echo "Everything is logged to file '${log_file}' in the current directory"
 	    echo
@@ -97,25 +133,68 @@ while [[ $# > 0 ]]; do
 	    echo "    Specify Puppet Master name"
 	    echo "    Default: hostname of running host"
 	    echo "             or 'puppet' if option -a or --agentonly is used "
+	    echo
 	    echo "-e env or --environment env"
 	    echo "    Specify environment for Puppet Agent"
 	    echo "    Possible values: production testing development"
 	    echo "    Default: development"
+	    echo
 	    echo "-a or --agentonly"
 	    echo "    Only install Puppet Agent"
 	    echo "    Default: install Puppet Master and Agent"
-	    echo "--path path"
+	    echo
+	    echo "--base_path path"
 	    echo "    Specify path to Puppet manifests"
 	    echo "    Argument ignored if option -a or --agentonly is used"
 	    echo "    Default: /srv/puppet"
+	    echo
+	    echo "--environment_list string"
+	    echo "    Specify a list of environment to use"
+	    echo "    Argument format : quoted string of words"
+	    echo "    Argument ignored if option -a or --agentonly is used"
+	    echo "    Default: \"production testing development\""
+	    echo
+	    echo "--manifestdir rel_path"
+	    echo "    Relative path to the manifestdir"
+	    echo "    Absolute path: [base_path]/[environment]/[manifestdir]"
+	    echo "    Argument ignored if option -a or --agentonly is used"
+	    echo "    Default: manifests"
+	    echo
+	    echo "--modulepath rel_path"
+	    echo "    Relative path to the modulepath"
+	    echo "    Absolute path: [base_path]/[environment]/[modulepath]"
+	    echo "    Argument ignored if option -a or --agentonly is used"
+	    echo "    Default: modules"
+	    echo
+	    echo "--templatedir rel_path"
+	    echo "    Relative path to the templatedir"
+	    echo "    Absolute path: [base_path]/[environment]/[templatedir]"
+	    echo "    Argument ignored if option -a or --agentonly is used"
+	    echo "    Default: data"
+	    echo
+	    echo "--dns_alt_names"
+	    echo "    Specify a comma-separated list of alternative DNS names"
+	    echo "    to use for the local host (See official documentation)."
+	    echo "    Example of use case: Needed if you want to contact your"
+	    echo "    Puppet Master with a name which is neither its hostname"
+	    echo "    nor 'puppet' ('puppetdev' for example)."
+	    echo "    Argument ignored if option -a or --agentonly is used"
+	    echo "    Default: puppet,puppet.$domain"
+	    echo
 	    echo "--mysql"
 	    echo "    Specify MySQL as database backend for Puppet Master"
 	    echo "    Argument ignored if option -a or --agentonly is used"
 	    echo "    Default: SQLite3 backend"
+	    echo
 	    echo "--passenger"
 	    echo "    Use Apache with Passenger module as HTTP server for Puppet Master"
 	    echo "    Argument ignored if option -a or --agentonly is used"
 	    echo "    Default: WEBrick (Ruby integrated HTTP server)"
+	    echo
+	    echo "--keep_vardir"
+	    echo "    Don't purge Puppet vardir"
+	    echo "    Default: Puppet vardir is purged"
+	    echo
 	    echo "-h or --help"
 	    echo "    Print this message"
 	    echo
@@ -147,30 +226,45 @@ done
 
 # Are we runned by root ?
 if [ "$(id -u)" != "0" ]; then
-    echo "This script must be run as root"
+    echo "Fatal error: This script must be run as root" 1>&2
     exit 1
 fi
 
 # Are we runned on a supported OS ?
 is_os_supported=YES
-if [ -f "/etc/debian_version" ]; then
-    # Original code from:
-    # http://unix.stackexchange.com/questions/109958/bash-script-to-find-debian-release-number-from-etc-debian-version
-    read -d . VERSION < /etc/debian_version
-    if [ "$VERSION" -ne "7" ]; then
+os_name=$(lsb_release -is)
+os_version_codename=$(lsb_release -cs)
+if [ "$os_name" == "Debian" ]; then
+    if [ "$os_version_codename" != "wheezy" ]; then
 	is_os_supported=NO
     fi
 else
     is_os_supported=NO
 fi
 if [ "$is_os_supported" == "NO" ]; then
-    echo "Your OS is not supported!"
+    echo "OS ${os_name} ${os_version_codename} is not supported!"
     read -p "Give it a try anyway (Y/N)? " -n 1 -r
-    echo
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]
     then
-	echo "Aborting as requested"
+	echo "Fatal error: Unsupported OS ${os_name} ${os_version_codename}" 1>&2
+	exit 1
+    fi
+    echo "Proceeding as requested"
+fi
+
+# Is selected environment in environment list ?
+if [ "$puppet_agent_only" == "NO" ]; then
+    found=false
+    for env in "${puppet_environment_list[@]}"; do
+	if [[ $env == $puppet_agent_environment ]]; then
+	    found=true
+	    break
+	fi
+    done
+    if [ "$found" = false ]; then
+	echo -n "Fatal error: Agent's environment ${puppet_agent_environment} is not valid. " 1>&2
+	echo "Should be one of these: ${puppet_environment_list[@]}" 1>&2
 	exit 1
     fi
 fi
@@ -247,9 +341,6 @@ if [ "$puppet_server_option" == "NO" ]; then
 	puppet_server=puppet
     fi
 fi
-puppet_manifests_production=${puppet_manifests_home}/production
-puppet_manifests_testing=${puppet_manifests_home}/testing
-puppet_manifests_development=${puppet_manifests_home}/development
 puppet_agent_packages="puppet facter"
 puppet_master_packages="puppetmaster"
 puppet_master_sqllite_packages="libactiverecord-ruby ruby-sqlite3 sqlite3"
@@ -265,19 +356,29 @@ puppet_master_addon_packages="openssh-server rsync"
 logtitle "Summary of Puppet environment set up"
 if [ "$puppet_agent_only" == "NO" ]; then
     loginfo " * Puppet Master:" " WILL BE INSTALLED"
-    loginfo "    - Manifests home:" " $puppet_manifests_home"
-    loginfo "    - Puppet server:" " $puppet_server"
-    loginfo "    - Available environments:" " production testing development"
-    loginfo "    - Use MySQL as database:" " $puppet_use_mysql"
-    loginfo "    - Use Apache and Passenger:" " $puppet_use_passenger"
+    loginfo "    - Server:                   " "${puppet_server}"
+    if [ "$puppet_use_dns_alt_names" == "YES" ]; then
+	loginfo "    - Server DNS alt names:     " "${puppet_dns_alt_names}"
+    fi
+    loginfo "    - Use MySQL as database:    " "${puppet_use_mysql}"
+    loginfo "    - Use Apache and Passenger: " "${puppet_use_passenger}"
+    loginfo "    - Available environments:   " "${puppet_environment_list[*]}"
+    loginfo "    - Manifests home:           " "${puppet_manifests_home}"
+    loginfo "    - Manifest dir:             " "${puppet_manifests_home}/[ENV]/${puppet_manifestdir}"
+    loginfo "    - Module path:              " "${puppet_manifests_home}/[ENV]/${puppet_modulepath}"
+    loginfo "    - Template dir:             " "${puppet_manifests_home}/[ENV]/${puppet_templatedir}"
+    loginfo "    - Purge vardir:             " "${puppet_purge_vardir}"
 else
     loginfo " * Puppet Master:" " WILL NOT BE INSTALLED"
 fi
 lognewline
+
 loginfo " * Puppet Agent:" " WILL BE INSTALLED"
-loginfo "    - Environment set:" " $puppet_agent_environment"
-loginfo "    - Puppet server:" " $puppet_server"
+loginfo "    - Environment:   " "${puppet_agent_environment}"
+loginfo "    - Puppet server: " "${puppet_server}"
+loginfo "    - Purge vardir:  " "${puppet_purge_vardir}"
 lognewline
+
 read -p "Proceed (Y/N)? " -n 1 -r
 echo
 echo
@@ -316,6 +417,35 @@ else
 fi
 logdone
 
+
+################################################################################
+# Shutdown Puppet Master daemon
+################################################################################
+
+logtitle "Shutdown Puppet Master daemon"
+logaction "Shutting down Puppet Master daemon..."
+service puppetmaster stop &>> "$log_file"
+logdone
+
+################################################################################
+# Remove Puppet Agent and Master vardir
+################################################################################
+
+if [ "$puppet_purge_vardir" == "YES" ]; then
+    logtitle "Remove Puppet Agent and Master vardir"
+    logaction "Identify Puppet Angent and Master vardir"
+    puppet_agent_vardir=$(puppet config print vardir --mode agent)
+    puppet_master_vardir=$(puppet config print vardir --mode master)
+    logaction "Remove Puppet Agent vardir: ${puppet_agent_vardir}"
+    rm -rf "${puppet_agent_vardir}/*" &>> "$log_file"
+    logaction "Remove Puppet Master vardir: ${puppet_master_vardir}"
+    rm -rf "${puppet_master_vardir}/*" &>> "$log_file"
+    logaction "Reset permissions on Puppet Angent and Master vardir"
+    chown puppet:puppet "${puppet_master_vardir}" "${puppet_agent_vardir}" &>> "$log_file"
+    chmod 750 "${puppet_master_vardir}" "${puppet_agent_vardir}" &>> "$log_file"
+    logdone
+fi
+
 # Begin of configuration for Puppet Master (not used when $puppet_agent_only is set to YES)
 if [ "$puppet_agent_only" == "NO" ]; then
 
@@ -325,15 +455,12 @@ if [ "$puppet_agent_only" == "NO" ]; then
 
     logtitle "Create directory structure for manifests"
     logaction "Create directory structure under ${puppet_manifests_home}"
-    mkdir -p ${puppet_manifests_production}/manifests &>> "$log_file"
-    mkdir -p ${puppet_manifests_production}/modules &>> "$log_file"
-    mkdir -p ${puppet_manifests_production}/templates &>> "$log_file"
-    mkdir -p ${puppet_manifests_testing}/manifests &>> "$log_file"
-    mkdir -p ${puppet_manifests_testing}/modules &>> "$log_file"
-    mkdir -p ${puppet_manifests_testing}/templates &>> "$log_file"
-    mkdir -p ${puppet_manifests_development}/manifests &>> "$log_file"
-    mkdir -p ${puppet_manifests_development}/modules &>> "$log_file"
-    mkdir -p ${puppet_manifests_development}/templates &>> "$log_file"
+    for env in "${puppet_environment_list[@]}"; do
+	loginfo "Create directory structure for environment ${env}"
+	mkdir -p ${puppet_manifests_home}/${env}/${puppet_manifestdir} &>> "$log_file"
+	mkdir -p ${puppet_manifests_home}/${env}/${puppet_modulepath} &>> "$log_file"
+	mkdir -p ${puppet_manifests_home}/${env}/${puppet_templatedir} &>> "$log_file"
+    done
     logaction "Setting permissions on directory structure"
     chown -R puppet:puppet ${puppet_manifests_home} &>> "$log_file"
     find ${puppet_manifests_home} -type d -exec chmod 750 {} + &>> "$log_file"
@@ -365,6 +492,20 @@ defvar defaultpuppetmaster /files/etc/default/puppetmaster
 set \$defaultpuppetmaster/START yes
 save
 EOF
+    if [ "$puppet_use_dns_alt_names" == "YES" ]; then
+	logaction "Delete the Puppet Master’s certificate, private key, and public key"
+	puppet_ssldir=$(puppet master --configprint ssldir)
+	puppet_certname="$(puppet master --configprint certname).pem"
+	find "${puppet_ssldir}" -name "${puppet_certname}" -delete &>> "$log_file"
+	logaction "Configure DNS alt names for Puppet Master"
+	augtool -e &>> "$log_file" <<EOF
+defvar puppetconf /files/etc/puppet/puppet.conf
+set \$puppetconf/master/dns_alt_names ${puppet_dns_alt_names}
+save
+EOF
+	logaction "Generate new Puppet Master’s certificate, private key, and public key"
+	puppet cert --generate $(hostname -f) &>> "$log_file"
+    fi
     logdone
 
 ################################################################################
@@ -419,8 +560,6 @@ defvar defaultpuppetmaster /files/etc/default/puppetmaster
 set \$defaultpuppetmaster/START no
 save
 EOF
-	logaction "Stop Puppet Master daemon"
-	service puppetmaster stop &>> "$log_file"
 	logaction "Customize Apache Puppet Master virtual host"
 	augtool -e &>> "$log_file"<<EOF
 defvar puppetmastervhost /files/etc/apache2/sites-available/puppetmaster
@@ -440,15 +579,15 @@ EOF
     fi
 
 ################################################################################
-# Restart Puppet Master
+# Start Puppet Master
 ################################################################################
 
-    logtitle "Restart Puppet master"
+    logtitle "Start Puppet master"
     if [ "$puppet_use_passenger" == "NO" ]; then
-	logaction "Restart Puppet Master daemon"
+	logaction "Start Puppet Master daemon"
 	service puppetmaster restart &>> "$log_file"
     else
-	logaction "Restart Apache"
+	logaction "Restart Apache (to start Puppat Master)"
 	service apache2 restart &>> "$log_file"
     fi
     logdone
@@ -494,8 +633,11 @@ if [ "$puppet_agent_only" == "NO" ]; then
     logaction "Set up a 'Hello World' manifest"
     rm -f /root/hello_puppet &>> "$log_file"
     manifest_file="${puppet_manifests_home}/${puppet_agent_environment}/manifests/site.pp"
+    existing_sitepp=NO
     if [ -f "$manifest_file" ]; then
+	existing_sitepp=YES
 	suffix=$(date +%Y-%m-%d-%H:%M:%S)_$$.$RANDOM
+	loginfo "Putting aside existing site.pp manifest"
 	loginfo "Renaming existing site.pp manifest"
 	loginfo "Will be suffixed with \"${suffix}\""
 	mv "$manifest_file" "${manifest_file}_${suffix}" &>> "$log_file"
@@ -512,6 +654,10 @@ file { "/root/hello_puppet":
 EOF
     logaction "Run Puppet Agent"
     puppet agent --test --color false &>> "$log_file"
+    if [ "$existing_sitepp" == "YES" ]; then
+	loginfo "Putting back existing site.pp manifest"
+	mv "${manifest_file}_${suffix}" "$manifest_file" &>> "$log_file"
+    fi
     loginfo "Is everything like we expected?"
     if [ -f /root/hello_puppet ]; then
 	loginfo "Yes! Everything's fine Captain!"
