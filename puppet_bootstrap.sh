@@ -436,13 +436,30 @@ if [ "$puppet_purge_vardir" == "YES" ]; then
     logaction "Identify Puppet Angent and Master vardir"
     puppet_agent_vardir=$(puppet config print vardir --mode agent)
     puppet_master_vardir=$(puppet config print vardir --mode master)
-    logaction "Remove Puppet Agent vardir: ${puppet_agent_vardir}"
-    rm -rf "${puppet_agent_vardir}/*" &>> "$log_file"
-    logaction "Remove Puppet Master vardir: ${puppet_master_vardir}"
-    rm -rf "${puppet_master_vardir}/*" &>> "$log_file"
-    logaction "Reset permissions on Puppet Angent and Master vardir"
-    chown puppet:puppet "${puppet_master_vardir}" "${puppet_agent_vardir}" &>> "$log_file"
-    chmod 750 "${puppet_master_vardir}" "${puppet_agent_vardir}" &>> "$log_file"
+
+    if [ -n "$puppet_agent_vardir" ]; then
+	logaction "Remove Puppet Agent vardir: ${puppet_agent_vardir}"
+	rm -rf "${puppet_agent_vardir}/*" &>> "$log_file"
+
+	logaction "Reset permissions on Puppet Agent vardir"
+	chown puppet:puppet "${puppet_agent_vardir}" &>> "$log_file"
+	chmod 750 "${puppet_agent_vardir}" &>> "$log_file"
+    else
+	logerror "WARNING ! Puppet Agent vardir is null"
+    fi
+
+    if [ "$puppet_agent_only" == "NO" ]; then
+	if [ -n "$puppet_master_vardir" ]; then
+	    logaction "Remove Puppet Master vardir: ${puppet_master_vardir}"
+	    rm -rf "${puppet_master_vardir}/*" &>> "$log_file"
+
+	    logaction "Reset permissions on Puppet Master vardir"
+	    chown puppet:puppet "${puppet_master_vardir}" &>> "$log_file"
+	    chmod 750 "${puppet_master_vardir}" &>> "$log_file"
+	else
+	    logerror "WARNING ! Puppet Master vardir is null"
+	fi
+    fi
     logdone
 fi
 
@@ -663,7 +680,7 @@ EOF
 	loginfo "Yes! Everything's fine Captain!"
     else
 	logerror "Nope! Something's broken :-("
-	logerror "See log for details"
+	logerror "See log './${log_file}' for details"
 	exit 1
     fi
     logdone
