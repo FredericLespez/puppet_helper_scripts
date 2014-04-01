@@ -15,15 +15,6 @@
 #     You should have received a copy of the GNU General Public License
 #     along with this program.  If not, see <http://www.gnu.org/licenses/>
 
-# TODO
-# - Add a quiet mode ?
-#   * Not easy for Puppet Master with MySQL since we will need to handle mysql
-#     root & puppet password in bash through the command line...
-#   * We can at least a quiet mode when only the agent is installed
-# - Are we sure that the lsb_release command is always installed by default ?
-# - Should we handle fileserve.conf (with custom mount per environment
-#   files_production, files_development, etc.) ?
-
 ################################################################################
 # Default values for arguments
 ################################################################################
@@ -356,18 +347,26 @@ puppet_master_addon_packages="openssh-server rsync"
 logtitle "Summary of Puppet environment set up"
 if [ "$puppet_agent_only" == "NO" ]; then
     loginfo " * Puppet Master:" " WILL BE INSTALLED"
-    loginfo "    - Server:                   " "${puppet_server}"
+    loginfo "    - Server:                 " "${puppet_server}"
     if [ "$puppet_use_dns_alt_names" == "YES" ]; then
-	loginfo "    - Server DNS alt names:     " "${puppet_dns_alt_names}"
+	loginfo "    - Server DNS alt names:   " "${puppet_dns_alt_names}"
     fi
-    loginfo "    - Use MySQL as database:    " "${puppet_use_mysql}"
-    loginfo "    - Use Apache and Passenger: " "${puppet_use_passenger}"
-    loginfo "    - Available environments:   " "${puppet_environment_list[*]}"
-    loginfo "    - Manifests home:           " "${puppet_manifests_home}"
-    loginfo "    - Manifest dir:             " "${puppet_manifests_home}/[ENV]/${puppet_manifestdir}"
-    loginfo "    - Module path:              " "${puppet_manifests_home}/[ENV]/${puppet_modulepath}"
-    loginfo "    - Template dir:             " "${puppet_manifests_home}/[ENV]/${puppet_templatedir}"
-    loginfo "    - Purge vardir:             " "${puppet_purge_vardir}"
+    if [ "$puppet_use_mysql" == "YES" ]; then
+	loginfo "    - Database backend:       " "MySQL"
+    else
+	loginfo "    - Database backend:       " "SQLite3"
+    fi
+    if [ "$puppet_use_passenger" == "YES" ]; then
+	loginfo "    - HTTP Backend:           " "Apache with mod Passenger"
+    else
+	loginfo "    - HTTP Backend:           " "WEBrick"
+    fi
+    loginfo "    - Available environments: " "${puppet_environment_list[*]}"
+    loginfo "    - Manifests home:         " "${puppet_manifests_home}"
+    loginfo "    - Manifest dir:           " "${puppet_manifests_home}/[ENV]/${puppet_manifestdir}"
+    loginfo "    - Module path:            " "${puppet_manifests_home}/[ENV]/${puppet_modulepath}"
+    loginfo "    - Template dir:           " "${puppet_manifests_home}/[ENV]/${puppet_templatedir}"
+    loginfo "    - Purge vardir:           " "${puppet_purge_vardir}"
 else
     loginfo " * Puppet Master:" " WILL NOT BE INSTALLED"
 fi
@@ -415,8 +414,17 @@ if [ "$puppet_use_mysql" == "YES" ]; then
 else
     aptitude -y -q=2 install ${packages} &>> "$log_file"
 fi
+logaction "Check that all packages are installed"
+for package in $packages; do
+    # See https://superuser.com/questions/427318/test-if-a-package-is-installed-in-apt
+    if dpkg-query -Wf'${db:Status-abbrev}' "${package}" 2>/dev/null | grep -q '^i'; then
+	echo " - ${package} is installed" &>> "$log_file"
+    else
+	logerror "ERROR: ${package} is NOT installed\! Aborting..."
+	exit 1
+    fi
+done
 logdone
-
 
 ################################################################################
 # Shutdown Puppet Master daemon
@@ -434,9 +442,15 @@ logdone
 if [ "$puppet_purge_vardir" == "YES" ]; then
     logtitle "Remove Puppet Agent and Master vardir"
     logaction "Identify Puppet Angent and Master vardir"
+    command -v puppet &>>/dev/null || {
+	logerror "ERROR: 'puppet' command not found.  Aborting."
+	exit 1
+    }
     puppet_agent_vardir=$(puppet config print vardir --mode agent)
     puppet_master_vardir=$(puppet config print vardir --mode master)
 
+    # Check that $puppet_agent_vardir is not an empty string
+    # to avoid thrashing the system
     if [ -n "$puppet_agent_vardir" ]; then
 	logaction "Remove Puppet Agent vardir: ${puppet_agent_vardir}"
 	rm -rf "${puppet_agent_vardir}/*" &>> "$log_file"
@@ -444,11 +458,17 @@ if [ "$puppet_purge_vardir" == "YES" ]; then
 	logaction "Reset permissions on Puppet Agent vardir"
 	chown puppet:puppet "${puppet_agent_vardir}" &>> "$log_file"
 	chmod 750 "${puppet_agent_vardir}" &>> "$log_file"
+	mkdir "${puppet_agent_vardir}/state" &>> "$log_file"
+	chown puppet:puppet "${puppet_agent_vardir}/state" &>> "$log_file"
+	chmod 755 "${puppet_agent_vardir}/state" &>> "$log_file"
     else
 	logerror "WARNING ! Puppet Agent vardir is null"
+	exit 1
     fi
 
     if [ "$puppet_agent_only" == "NO" ]; then
+	# Check that $puppet_master_vardir is not an empty string
+	# to avoid thrashing the system
 	if [ -n "$puppet_master_vardir" ]; then
 	    logaction "Remove Puppet Master vardir: ${puppet_master_vardir}"
 	    rm -rf "${puppet_master_vardir}/*" &>> "$log_file"
@@ -456,8 +476,12 @@ if [ "$puppet_purge_vardir" == "YES" ]; then
 	    logaction "Reset permissions on Puppet Master vardir"
 	    chown puppet:puppet "${puppet_master_vardir}" &>> "$log_file"
 	    chmod 750 "${puppet_master_vardir}" &>> "$log_file"
+	    mkdir "${puppet_master_vardir}/state" &>> "$log_file"
+	    chown puppet:puppet "${puppet_master_vardir}/state" &>> "$log_file"
+	    chmod 755 "${puppet_master_vardir}/state" &>> "$log_file"
 	else
 	    logerror "WARNING ! Puppet Master vardir is null"
+	    exit 1
 	fi
     fi
     logdone

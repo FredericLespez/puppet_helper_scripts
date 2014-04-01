@@ -1,0 +1,15 @@
+* Add a quiet mode ?
+ - Not easy for Puppet Master with MySQL since we will need to handle
+   mysql root & puppet password in bash through the command line...
+ - We can at least add a quiet mode when only the agent is installed
+* Are we sure that the lsb_release command is always installed by default ?
+* Should we handle fileserve.conf (with custom mounts per environment:
+   files_production, files_development, etc.) ?
+* Test if Puppet master server is reachable (name resolution and ping) ?
+ - https://unix.stackexchange.com/questions/20784/how-can-i-resolve-a-hostname-to-an-ip-address-in-a-bash-script
+ - Test if we have "dig" command from dnsutils package ? Install this package ?
+ - Or test if we have "host" command from bind9-host package ? Install
+   this package ?
+ - facter depends on that package
+* How to restore Puppet config files to their initial contents ?
+ - https://unix.stackexchange.com/questions/27762/restore-etc-configuration-files-from-the-default
