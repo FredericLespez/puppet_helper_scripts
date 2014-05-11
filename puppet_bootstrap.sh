@@ -518,9 +518,9 @@ if [ "$puppet_agent_only" == "NO" ]; then
 defvar puppetconf /files/etc/puppet/puppet.conf
 rm \$puppetconf/main/prerun_command
 rm \$puppetconf/main/postrun_command
-set \$puppetconf/main/manifestdir ${puppet_manifests_home}/\$environment/manifests
-set \$puppetconf/main/modulepath ${puppet_manifests_home}/\$environment/modules
-set \$puppetconf/main/templatedir ${puppet_manifests_home}/\$environment/templates
+set \$puppetconf/main/manifestdir ${puppet_manifests_home}/\$environment/${puppet_manifestdir}
+set \$puppetconf/main/modulepath ${puppet_manifests_home}/\$environment/${puppet_modulepath}
+set \$puppetconf/main/templatedir ${puppet_manifests_home}/\$environment/${puppet_templatedir}
 set \$puppetconf/master/storeconfigs true
 set \$puppetconf/master/thin_storeconfigs true
 set \$puppetconf/master/dbadapter sqlite3
