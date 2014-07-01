@@ -39,7 +39,7 @@ puppet_purge_vardir=YES
 ################################################################################
 # Original code from:
 # http://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
-while [[ $# > 0 ]]; do
+while [[ $# -gt 0 ]]; do
     key="$1"
     shift
 
@@ -61,7 +61,7 @@ while [[ $# > 0 ]]; do
 	    shift
 	    ;;
 	--environment_list)
-	    puppet_environment_list=($(echo $1))
+	    puppet_environment_list=($1)
 	    shift
 	    ;;
 	--manifestdir)
@@ -248,7 +248,7 @@ fi
 if [ "$puppet_agent_only" == "NO" ]; then
     found=false
     for env in "${puppet_environment_list[@]}"; do
-	if [[ $env == $puppet_agent_environment ]]; then
+	if [[ "$env" == "$puppet_agent_environment" ]]; then
 	    found=true
 	    break
 	fi
@@ -410,9 +410,9 @@ aptitude update 2>> "$log_file" 1> /dev/null
 logaction "Proceed to install"
 if [ "$puppet_use_mysql" == "YES" ]; then
     # We can't suppress output because we need to enter MySQL root user password
-    DEBIAN_FRONTEND=text aptitude -y -q=2 install ${packages} |tee -a "$log_file"
+    DEBIAN_FRONTEND=text aptitude -y -q=2 install "${packages}" |tee -a "$log_file"
 else
-    aptitude -y -q=2 install ${packages} &>> "$log_file"
+    aptitude -y -q=2 install "${packages}" &>> "$log_file"
 fi
 logaction "Check that all packages are installed"
 for package in $packages; do
@@ -456,11 +456,13 @@ if [ "$puppet_purge_vardir" == "YES" ]; then
 	rm -rf "${puppet_agent_vardir}/*" &>> "$log_file"
 
 	logaction "Reset permissions on Puppet Agent vardir"
-	chown puppet:puppet "${puppet_agent_vardir}" &>> "$log_file"
-	chmod 750 "${puppet_agent_vardir}" &>> "$log_file"
-	mkdir "${puppet_agent_vardir}/state" &>> "$log_file"
-	chown puppet:puppet "${puppet_agent_vardir}/state" &>> "$log_file"
-	chmod 755 "${puppet_agent_vardir}/state" &>> "$log_file"
+	{
+	    chown puppet:puppet "${puppet_agent_vardir}";
+	    chmod 750 "${puppet_agent_vardir}";
+	    mkdir "${puppet_agent_vardir}/state";
+	    chown puppet:puppet "${puppet_agent_vardir}/state";
+	    chmod 755 "${puppet_agent_vardir}/state";
+	} &>> "$log_file"
     else
 	logerror "WARNING ! Puppet Agent vardir is null"
 	exit 1
@@ -474,11 +476,13 @@ if [ "$puppet_purge_vardir" == "YES" ]; then
 	    rm -rf "${puppet_master_vardir}/*" &>> "$log_file"
 
 	    logaction "Reset permissions on Puppet Master vardir"
-	    chown puppet:puppet "${puppet_master_vardir}" &>> "$log_file"
-	    chmod 750 "${puppet_master_vardir}" &>> "$log_file"
-	    mkdir "${puppet_master_vardir}/state" &>> "$log_file"
-	    chown puppet:puppet "${puppet_master_vardir}/state" &>> "$log_file"
-	    chmod 755 "${puppet_master_vardir}/state" &>> "$log_file"
+	    {
+		chown puppet:puppet "${puppet_master_vardir}";
+		chmod 750 "${puppet_master_vardir}";
+		mkdir "${puppet_master_vardir}/state";
+		chown puppet:puppet "${puppet_master_vardir}/state";
+		chmod 755 "${puppet_master_vardir}/state";
+	    } &>> "$log_file"
 	else
 	    logerror "WARNING ! Puppet Master vardir is null"
 	    exit 1
@@ -498,14 +502,18 @@ if [ "$puppet_agent_only" == "NO" ]; then
     logaction "Create directory structure under ${puppet_manifests_home}"
     for env in "${puppet_environment_list[@]}"; do
 	loginfo "Create directory structure for environment ${env}"
-	mkdir -p ${puppet_manifests_home}/${env}/${puppet_manifestdir} &>> "$log_file"
-	mkdir -p ${puppet_manifests_home}/${env}/${puppet_modulepath} &>> "$log_file"
-	mkdir -p ${puppet_manifests_home}/${env}/${puppet_templatedir} &>> "$log_file"
+	{
+	    mkdir -p "${puppet_manifests_home}/${env}/${puppet_manifestdir}";
+	    mkdir -p "${puppet_manifests_home}/${env}/${puppet_modulepath}";
+	    mkdir -p "${puppet_manifests_home}/${env}/${puppet_templatedir}";
+	} &>> "$log_file"
     done
     logaction "Setting permissions on directory structure"
-    chown -R puppet:puppet ${puppet_manifests_home} &>> "$log_file"
-    find ${puppet_manifests_home} -type d -exec chmod 750 {} + &>> "$log_file"
-    find ${puppet_manifests_home} -type f -exec chmod 640 {} + &>> "$log_file"
+    {
+	chown -R puppet:puppet "${puppet_manifests_home}";
+	find "${puppet_manifests_home}" -type d -exec chmod 750 {} +;
+	find "${puppet_manifests_home}" -type f -exec chmod 640 {} +;
+    } &>> "$log_file"
     logdone
 
 ################################################################################
@@ -545,7 +553,7 @@ set \$puppetconf/master/dns_alt_names ${puppet_dns_alt_names}
 save
 EOF
 	logaction "Generate new Puppet Master’s certificate, private key, and public key"
-	puppet cert --generate $(hostname -f) &>> "$log_file"
+	puppet cert --generate "$(hostname -f)" &>> "$log_file"
     fi
     logdone
 
