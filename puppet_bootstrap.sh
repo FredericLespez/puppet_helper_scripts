@@ -412,7 +412,7 @@ if [ "$puppet_use_mysql" == "YES" ]; then
     # We can't suppress output because we need to enter MySQL root user password
     DEBIAN_FRONTEND=text aptitude -y -q=2 install "${packages}" |tee -a "$log_file"
 else
-    aptitude -y -q=2 install "${packages}" &>> "$log_file"
+    aptitude -y -q=2 install ${packages} &>> "$log_file"
 fi
 logaction "Check that all packages are installed"
 for package in $packages; do
@@ -430,10 +430,12 @@ logdone
 # Shutdown Puppet Master daemon
 ################################################################################
 
-logtitle "Shutdown Puppet Master daemon"
-logaction "Shutting down Puppet Master daemon..."
-service puppetmaster stop &>> "$log_file"
-logdone
+if [ "$puppet_agent_only" == "NO" ]; then
+    logtitle "Shutdown Puppet Master daemon"
+    logaction "Shutting down Puppet Master daemon..."
+    service puppetmaster stop &>> "$log_file"
+    logdone
+fi
 
 ################################################################################
 # Remove Puppet Agent and Master vardir
@@ -441,7 +443,7 @@ logdone
 
 if [ "$puppet_purge_vardir" == "YES" ]; then
     logtitle "Remove Puppet Agent and Master vardir"
-    logaction "Identify Puppet Angent and Master vardir"
+    logaction "Identify Puppet Agent and Master vardir"
     command -v puppet &>>/dev/null || {
 	logerror "ERROR: 'puppet' command not found.  Aborting."
 	exit 1
@@ -521,7 +523,7 @@ if [ "$puppet_agent_only" == "NO" ]; then
 ################################################################################
 
     logtitle "Configure Puppet Master"
-    logaction "Modify /etc/puppet/puppet/conf to set up Master"
+    logaction "Modify /etc/puppet/puppet.conf to set up Master"
     augtool -e &>> "$log_file" <<EOF
 defvar puppetconf /files/etc/puppet/puppet.conf
 rm \$puppetconf/main/prerun_command
@@ -636,7 +638,7 @@ EOF
 	logaction "Start Puppet Master daemon"
 	service puppetmaster restart &>> "$log_file"
     else
-	logaction "Restart Apache (to start Puppat Master)"
+	logaction "Restart Apache (to start Puppet Master)"
 	service apache2 restart &>> "$log_file"
     fi
     logdone
@@ -649,7 +651,7 @@ fi
 ################################################################################
 
 logtitle "Configure Puppet agent"
-logaction "Modify /etc/puppet/puppet/conf to set up Agent"
+logaction "Modify /etc/puppet/puppet.conf to set up Agent"
 augtool -e &>> "$log_file" <<EOF
 defvar puppetconf /files/etc/puppet/puppet.conf
 set \$puppetconf/agent/environment ${puppet_agent_environment}
