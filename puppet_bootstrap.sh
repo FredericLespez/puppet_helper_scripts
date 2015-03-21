@@ -163,7 +163,7 @@ while [[ $# -gt 0 ]]; do
 	    echo "    Argument ignored if option -a or --agentonly is used"
 	    echo "    Default: data"
 	    echo
-	    echo "--dns_alt_names"
+	    echo "--dns_alt_names puppetdev.example.com,puppetdev"
 	    echo "    Specify a comma-separated list of alternative DNS names"
 	    echo "    to use for the local host (See official documentation)."
 	    echo "    Example of use case: Needed if you want to contact your"
@@ -273,6 +273,7 @@ PURPLE="\033[1;35m"
 CYAN="\033[1;36m"
 WHITE="\033[1;37m"
 NO_COLOR="\033[0m"
+
 logmess()
 {
     local COLOR="$1"
@@ -427,23 +428,23 @@ done
 logdone
 
 ################################################################################
-# Shutdown Puppet Master daemon
+# Stop Puppet Master daemon
 ################################################################################
 
 if [ "$puppet_agent_only" == "NO" ]; then
-    logtitle "Shutdown Puppet Master daemon"
-    logaction "Shutting down Puppet Master daemon..."
+    logtitle "Stop Puppet Master daemon"
+    logaction "Stopping Puppet Master daemon..."
     service puppetmaster stop &>> "$log_file"
     logdone
 fi
 
 ################################################################################
-# Remove Puppet Agent and Master vardir
+# Remove Puppet Agent and Master vardirs
 ################################################################################
 
 if [ "$puppet_purge_vardir" == "YES" ]; then
-    logtitle "Remove Puppet Agent and Master vardir"
-    logaction "Identify Puppet Agent and Master vardir"
+    logtitle "Remove Puppet Agent and Master vardirs"
+    logaction "Identify Puppet Agent and Master vardirs"
     command -v puppet &>>/dev/null || {
 	logerror "ERROR: 'puppet' command not found.  Aborting."
 	exit 1
@@ -497,7 +498,7 @@ fi
 if [ "$puppet_agent_only" == "NO" ]; then
 
 ################################################################################
-# Create manifest structure
+# Create manifest structure on Puppet Master
 ################################################################################
 
     logtitle "Create directory structure for manifests"
@@ -519,7 +520,7 @@ if [ "$puppet_agent_only" == "NO" ]; then
     logdone
 
 ################################################################################
-# Modify default puppetmaster configuration
+# Modify default Puppet Master configuration
 ################################################################################
 
     logtitle "Configure Puppet Master"
@@ -600,7 +601,7 @@ EOF
     fi
 
 ################################################################################
-# Setup Apache and Passenger module
+# Setup Apache and Passenger module on Puppet Master
 ################################################################################
 
     if [ "$puppet_use_passenger" == "YES" ]; then
@@ -647,7 +648,7 @@ fi
 # End of configuration for Puppet Master (not used when $puppet_agent_only is set to YES)
 
 ################################################################################
-# Modify default puppet agent configuration
+# Modify default Puppet Agent configuration
 ################################################################################
 
 logtitle "Configure Puppet agent"
@@ -660,9 +661,11 @@ set \$puppetconf/agent/pluginsync true
 save
 EOF
 if [ "$puppet_agent_only" == "YES" ]; then
+    logtitle "Register Puppet Agent"
     logaction "Registering Puppet Agent on Puppet Master (${puppet_server})..."
     puppet agent --server ${puppet_server} --test --noop --color false &>> "$log_file"
-    loginfo "Instructions to finish the agent registration"
+
+    logaction "Instructions to finish the agent registration"
     loginfo "On the Puppet Master (${puppet_server}):"
     loginfo " - List the waiting certificates with this command:"
     loginfo "   # puppet cert --list"
@@ -670,6 +673,7 @@ if [ "$puppet_agent_only" == "YES" ]; then
     loginfo "   # puppet cert --sign $(hostname -f)"
     loginfo "After that, the Puppet Agent will be operational"
     logdone
+
     logtitle "That's all folks !"
     exit 0
 fi
@@ -735,4 +739,4 @@ EOF
 fi
 
 logtitle "That's all folks !"
-exit
+exit 0
