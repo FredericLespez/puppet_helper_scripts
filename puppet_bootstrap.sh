@@ -204,8 +204,7 @@ while [[ $# -gt 0 ]]; do
 	    ;;
 	*)
 	    # Unknown option
-	    echo "Unknown option ${key}"
-	    echo "Use -h or --help to see options"
+	    echo "Fatal error: Unknown option ${key}. Use -h or --help to see options"
 	    exit 1
 	    ;;
     esac
